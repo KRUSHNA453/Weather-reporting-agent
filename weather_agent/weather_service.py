@@ -73,6 +73,11 @@ TRAILING_NOISE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+TRAILING_TIME_CONTEXT_PATTERN = re.compile(
+    r"\b(?:on|for|this|next|weekend|week|hourly|daily|morning|afternoon|evening|night)\b.*$",
+    re.IGNORECASE,
+)
+
 NON_CITY_QUERY_WORDS = {
     "what",
     "how",
@@ -103,8 +108,20 @@ NON_CITY_QUERY_WORDS = {
     "chance",
     "probability",
     "there",
+    "it",
+    "will",
     "be",
+    "like",
 }
+
+CITY_BE_CONTEXT_PATTERN = re.compile(
+    r"\b(?:will|is|was|were)\s+([A-Za-z][A-Za-z.'-]{1,40}(?:\s+[A-Za-z][A-Za-z.'-]{1,40}){0,2})\s+be\b",
+    re.IGNORECASE,
+)
+
+CAPITALIZED_CITY_PATTERN = re.compile(
+    r"\b([A-Z][A-Za-z.'-]{1,40}(?:\s+[A-Z][A-Za-z.'-]{1,40}){0,2})\b",
+)
 
 
 def _extract_city_name(raw_city: str) -> str:
@@ -144,6 +161,7 @@ def _sanitize_city_candidate(candidate: str) -> str:
     value = candidate.strip("`\"' \n\t")
     value = re.split(r"[?!;,]", value, maxsplit=1)[0].strip()
     value = TRAILING_NOISE_PATTERN.sub("", value).strip("`\"' \n\t")
+    value = TRAILING_TIME_CONTEXT_PATTERN.sub("", value).strip("`\"' \n\t")
     value = re.sub(r"\s{2,}", " ", value)
     return value
 
@@ -167,10 +185,28 @@ def infer_city_from_text(text: str) -> str | None:
         words = [w.lower() for w in re.findall(r"[A-Za-z']+", simple_candidate)]
         if not words:
             return None
-        if any(word in NON_CITY_QUERY_WORDS for word in words):
-            return None
-        if 1 <= len(words) <= 4:
+        if not any(word in NON_CITY_QUERY_WORDS for word in words) and 1 <= len(words) <= 4:
             return simple_candidate
+
+    for be_match in CITY_BE_CONTEXT_PATTERN.finditer(raw):
+        candidate = _sanitize_city_candidate(be_match.group(1))
+        words = [w.lower() for w in re.findall(r"[A-Za-z']+", candidate)]
+        if not words:
+            continue
+        if any(word in NON_CITY_QUERY_WORDS for word in words):
+            continue
+        if 1 <= len(words) <= 4:
+            return candidate
+
+    for cap_match in CAPITALIZED_CITY_PATTERN.finditer(raw):
+        candidate = _sanitize_city_candidate(cap_match.group(1))
+        words = [w.lower() for w in re.findall(r"[A-Za-z']+", candidate)]
+        if not words:
+            continue
+        if any(word in NON_CITY_QUERY_WORDS for word in words):
+            continue
+        if 1 <= len(words) <= 4:
+            return candidate
     return None
 
 
@@ -251,6 +287,40 @@ def _build_weather_details(payload: dict[str, Any], fallback_city: str) -> dict[
         "description": description.strip(),
         "humidity_percent": int(humidity),
         "wind_speed_mps": structured_wind,
+    }
+
+
+def _build_weather_details_from_forecast(payload: dict[str, Any], fallback_city: str) -> dict[str, Any] | None:
+    entries = payload.get("list")
+    if not isinstance(entries, list) or not entries:
+        return None
+
+    first_entry = entries[0] if isinstance(entries[0], dict) else None
+    if not isinstance(first_entry, dict):
+        return None
+
+    main_data = first_entry.get("main") if isinstance(first_entry.get("main"), dict) else {}
+    weather_items = first_entry.get("weather") if isinstance(first_entry.get("weather"), list) else []
+    weather_data = weather_items[0] if weather_items and isinstance(weather_items[0], dict) else {}
+    wind_data = first_entry.get("wind") if isinstance(first_entry.get("wind"), dict) else {}
+
+    temp_value = main_data.get("temp")
+    humidity_value = main_data.get("humidity")
+    if not isinstance(temp_value, (int, float)) or not isinstance(humidity_value, (int, float)):
+        return None
+
+    city_info = payload.get("city") if isinstance(payload.get("city"), dict) else {}
+    city_display = city_info.get("name")
+    if not isinstance(city_display, str) or not city_display.strip():
+        city_display = fallback_city
+
+    wind_speed = wind_data.get("speed")
+    return {
+        "city": city_display,
+        "temperature_c": round(float(temp_value), 1),
+        "description": str(weather_data.get("description") or "No description").strip(),
+        "humidity_percent": int(humidity_value),
+        "wind_speed_mps": round(float(wind_speed), 1) if isinstance(wind_speed, (int, float)) else None,
     }
 
 
@@ -628,7 +698,7 @@ def get_weather_forecast(tool_input: str) -> str:
     time_reference = _extract_time_reference(query)
     current_payload = _fetch_openweather_payload(city_name, OPENWEATHER_API_URL)
     forecast_payload = _fetch_openweather_payload(city_name, OPENWEATHER_FORECAST_URL)
-    if current_payload is None or forecast_payload is None:
+    if current_payload is None and forecast_payload is None:
         return json.dumps(
             {
                 "status": "service_unavailable",
@@ -637,7 +707,13 @@ def get_weather_forecast(tool_input: str) -> str:
             }
         )
 
-    current_details = _build_weather_details(current_payload, fallback_city=city_name)
+    current_details = (
+        _build_weather_details(current_payload, fallback_city=city_name)
+        if isinstance(current_payload, dict)
+        else None
+    )
+    if current_details is None and isinstance(forecast_payload, dict):
+        current_details = _build_weather_details_from_forecast(forecast_payload, fallback_city=city_name)
     if current_details is None:
         return json.dumps(
             {
@@ -647,8 +723,11 @@ def get_weather_forecast(tool_input: str) -> str:
             }
         )
 
-    hourly_entries, timezone_shift = _build_hourly_entries(forecast_payload)
-    daily_entries = _build_daily_entries(hourly_entries)
+    if isinstance(forecast_payload, dict):
+        hourly_entries, timezone_shift = _build_hourly_entries(forecast_payload)
+        daily_entries = _build_daily_entries(hourly_entries)
+    else:
+        hourly_entries, timezone_shift, daily_entries = [], 0, []
     start_date = str(time_reference["start_date"])
     end_date = str(time_reference["end_date"])
     selected_hourly = _filter_entries_by_date(hourly_entries, start_date, end_date)
@@ -676,10 +755,23 @@ def get_weather_forecast(tool_input: str) -> str:
     if not storm_periods:
         storm_periods = [str(item.get("date")) for item in selected_daily if bool(item.get("storm_possible"))]
 
-    coord = current_payload.get("coord") if isinstance(current_payload.get("coord"), dict) else {}
-    lat_value = coord.get("lat") if isinstance(coord.get("lat"), (int, float)) else None
-    lon_value = coord.get("lon") if isinstance(coord.get("lon"), (int, float)) else None
+    current_coord = current_payload.get("coord") if isinstance(current_payload, dict) and isinstance(current_payload.get("coord"), dict) else {}
+    forecast_city = forecast_payload.get("city") if isinstance(forecast_payload, dict) and isinstance(forecast_payload.get("city"), dict) else {}
+    lat_value = current_coord.get("lat")
+    lon_value = current_coord.get("lon")
+    if not isinstance(lat_value, (int, float)):
+        lat_value = forecast_city.get("coord", {}).get("lat") if isinstance(forecast_city.get("coord"), dict) else None
+    if not isinstance(lon_value, (int, float)):
+        lon_value = forecast_city.get("coord", {}).get("lon") if isinstance(forecast_city.get("coord"), dict) else None
+    lat_value = float(lat_value) if isinstance(lat_value, (int, float)) else None
+    lon_value = float(lon_value) if isinstance(lon_value, (int, float)) else None
     alerts = _extract_alerts(lat_value, lon_value)
+
+    current_wind = current_payload.get("wind") if isinstance(current_payload, dict) and isinstance(current_payload.get("wind"), dict) else {}
+    current_wind_deg = current_wind.get("deg")
+    if not isinstance(current_wind_deg, (int, float)) and hourly_entries:
+        first_hour = hourly_entries[0] if isinstance(hourly_entries[0], dict) else {}
+        current_wind_deg = first_hour.get("wind_deg")
 
     response_payload = {
         "status": "ok",
@@ -694,13 +786,8 @@ def get_weather_forecast(tool_input: str) -> str:
             "temperature_c": current_details.get("temperature_c"),
             "humidity_percent": current_details.get("humidity_percent"),
             "wind_speed_mps": current_details.get("wind_speed_mps"),
-            "wind_deg": float(current_payload.get("wind", {}).get("deg"))
-            if isinstance(current_payload.get("wind"), dict)
-            and isinstance(current_payload.get("wind", {}).get("deg"), (int, float))
-            else None,
-            "wind_direction": _wind_direction_label(current_payload.get("wind", {}).get("deg"))
-            if isinstance(current_payload.get("wind"), dict)
-            else None,
+            "wind_deg": float(current_wind_deg) if isinstance(current_wind_deg, (int, float)) else None,
+            "wind_direction": _wind_direction_label(current_wind_deg),
             "description": current_details.get("description"),
         },
         "rain_probability_percent": rain_probability,

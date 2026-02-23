@@ -116,10 +116,19 @@ def persona_instruction_block(persona: dict[str, Any], response_style: str) -> s
 
 
 def _clip_first_sentence(text: str) -> str:
-    first_sentence = text.split(".")[0].strip()
-    if first_sentence and not first_sentence.endswith("."):
-        first_sentence += "."
-    return first_sentence or text
+    payload = str(text or "").strip()
+    if not payload:
+        return ""
+
+    for index, char in enumerate(payload):
+        if char not in ".!?":
+            continue
+        prev_char = payload[index - 1] if index > 0 else ""
+        next_char = payload[index + 1] if index + 1 < len(payload) else ""
+        if char == "." and prev_char.isdigit() and next_char.isdigit():
+            continue
+        return payload[: index + 1].strip() or payload
+    return payload
 
 
 def apply_persona_style(

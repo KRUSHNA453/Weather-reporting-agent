@@ -235,7 +235,7 @@
     .prefs-row {
       display: grid;
       gap: 8px;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: 1fr;
     }
 
     .prefs-row input,
@@ -308,10 +308,6 @@
     <section class="composer">
       <div class="prefs-row">
         <select id="personaSelect"></select>
-        <select id="unitsSelect">
-          <option value="metric">Units: Metric</option>
-          <option value="imperial">Units: Imperial</option>
-        </select>
       </div>
       <div class="composer-row">
         <textarea id="messageInput" placeholder="Type your weather question..." maxlength="500"></textarea>
@@ -333,7 +329,6 @@
     const humidityValueEl = document.getElementById("humidityValue");
     const windValueEl = document.getElementById("windValue");
     const personaSelect = document.getElementById("personaSelect");
-    const unitsSelect = document.getElementById("unitsSelect");
 
     function setStatus(state) {
       statusEl.textContent = state;
@@ -425,9 +420,7 @@
           body: JSON.stringify({
             message,
             persona_id: personaSelect.value || "professional",
-            preferences: {
-              units: unitsSelect.value || "metric",
-            },
+            preferences: {},
           }),
         });
 
@@ -450,7 +443,7 @@
         const botText = payload.response || "No response text received.";
         appendMessage("bot", botText);
         setStatus("Success");
-        metaEl.textContent = `city=${payload.city || "unknown"} | units=${payload.units || "metric"}`;
+        metaEl.textContent = `city=${payload.city || "unknown"}`;
         renderWeatherDetails(payload || {});
       } catch (error) {
         setStatus("Error");
