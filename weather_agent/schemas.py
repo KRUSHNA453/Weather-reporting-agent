@@ -15,7 +15,7 @@ class ChatRequest(BaseModel):
     user_id: str | None = Field(default="guest", max_length=64)
     persona_id: str | None = Field(default=None, max_length=40)
     preferences: UserPreferences | None = None
-    remember_memory: bool = True
+    remember_memory: bool = False
     include_trace: bool = False
 
 

@@ -36,23 +36,18 @@ Open:
 
 - The chat endpoint now runs a multi-step autonomous loop:
   - `plan -> tool-call -> observe -> reflect -> final-answer`
-- Trace steps are logged server-side and can be returned in API response with `include_trace=true`.
-- User preferences and conversation memory are persisted in SQLite (`agent_memory.db`) by `user_id`.
-- Personas are selectable (`professional`, `friendly`, `analyst`) and combined with response style (`brief`, `balanced`, `detailed`).
+- Main UI uses persona-first flow with 5 personas:
+  - `professional`, `friendly`, `analyst`, `teacher`, `safety`
+- Long-term memory and trace features remain available via API, but are disabled by default in chat requests.
 
 ### Example `POST /chat`
 
 ```json
 {
   "message": "What is the future weather in Chennai?",
-  "user_id": "demo-user",
-  "persona_id": "analyst",
-  "remember_memory": true,
-  "include_trace": true,
+  "persona_id": "teacher",
   "preferences": {
-    "city": "Chennai",
-    "units": "imperial",
-    "response_style": "detailed"
+    "units": "metric"
   }
 }
 ```

@@ -19,6 +19,17 @@ from .weather_service import (
 LOGGER = logging.getLogger("weather_agent.autonomous")
 
 
+def _default_profile(user_id: str) -> dict[str, Any]:
+    return {
+        "user_id": user_id,
+        "persona_id": "professional",
+        "preferred_city": None,
+        "units": "metric",
+        "response_style": "brief",
+        "updated_at": None,
+    }
+
+
 def _ensure_city_in_input(user_input: str, city_name: str) -> str:
     if city_name.lower() in user_input.lower():
         return user_input
@@ -52,7 +63,7 @@ def run_autonomous_weather_agent(
 ) -> dict[str, Any]:
     trace: list[dict[str, Any]] = []
     safe_user_id = normalize_user_id(user_id)
-    profile = get_user_profile(safe_user_id)
+    profile = get_user_profile(safe_user_id) if remember_memory else _default_profile(safe_user_id)
     updates = dict(preference_updates or {})
 
     effective_persona_id = str(persona_id or profile.get("persona_id") or "professional")
@@ -193,7 +204,7 @@ def run_autonomous_weather_agent(
         "tool_payload": tool_payload,
         "resolved_city": resolved_city,
         "trace": trace,
-        "profile": profile,
+        "profile": profile if remember_memory else None,
         "persona_id": str(persona.get("id")),
         "units": effective_units,
         "response_style": effective_style,

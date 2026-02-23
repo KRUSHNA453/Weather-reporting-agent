@@ -235,16 +235,11 @@
     .prefs-row {
       display: grid;
       gap: 8px;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-
-    .prefs-row.compact {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .prefs-row input,
-    .prefs-row select,
-    .prefs-row label {
+    .prefs-row select {
       width: 100%;
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -252,13 +247,6 @@
       font: inherit;
       color: var(--text);
       background: rgba(255, 255, 255, 0.92);
-    }
-
-    .prefs-row label {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
     }
 
     @media (max-width: 720px) {
@@ -278,8 +266,7 @@
         grid-template-columns: 1fr;
       }
 
-      .prefs-row,
-      .prefs-row.compact {
+      .prefs-row {
         grid-template-columns: 1fr;
       }
 
@@ -320,21 +307,11 @@
 
     <section class="composer">
       <div class="prefs-row">
-        <input id="userIdInput" value="guest" maxlength="64" placeholder="User ID (memory key)" />
         <select id="personaSelect"></select>
         <select id="unitsSelect">
           <option value="metric">Units: Metric</option>
           <option value="imperial">Units: Imperial</option>
         </select>
-        <select id="styleSelect">
-          <option value="brief">Style: Brief</option>
-          <option value="balanced">Style: Balanced</option>
-          <option value="detailed">Style: Detailed</option>
-        </select>
-      </div>
-      <div class="prefs-row compact">
-        <label><input id="rememberToggle" type="checkbox" /> Remember long-term memory</label>
-        <label><input id="traceToggle" type="checkbox" /> Include reasoning trace</label>
       </div>
       <div class="composer-row">
         <textarea id="messageInput" placeholder="Type your weather question..." maxlength="500"></textarea>
@@ -355,12 +332,8 @@
     const tempValueEl = document.getElementById("tempValue");
     const humidityValueEl = document.getElementById("humidityValue");
     const windValueEl = document.getElementById("windValue");
-    const userIdInput = document.getElementById("userIdInput");
     const personaSelect = document.getElementById("personaSelect");
     const unitsSelect = document.getElementById("unitsSelect");
-    const styleSelect = document.getElementById("styleSelect");
-    const rememberToggle = document.getElementById("rememberToggle");
-    const traceToggle = document.getElementById("traceToggle");
 
     function setStatus(state) {
       statusEl.textContent = state;
@@ -402,6 +375,8 @@
         { id: "professional", name: "Professional Forecaster" },
         { id: "friendly", name: "Friendly Guide" },
         { id: "analyst", name: "Data Analyst" },
+        { id: "teacher", name: "Weather Teacher" },
+        { id: "safety", name: "Safety Advisor" },
       ];
 
       let personas = fallback;
@@ -449,13 +424,9 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             message,
-            user_id: (userIdInput.value || "guest").trim() || "guest",
             persona_id: personaSelect.value || "professional",
-            remember_memory: !!rememberToggle.checked,
-            include_trace: !!traceToggle.checked,
             preferences: {
               units: unitsSelect.value || "metric",
-              response_style: styleSelect.value || "brief",
             },
           }),
         });
@@ -481,13 +452,6 @@
         setStatus("Success");
         metaEl.textContent = `city=${payload.city || "unknown"} | units=${payload.units || "metric"}`;
         renderWeatherDetails(payload || {});
-
-        if (Array.isArray(payload.agent_trace) && payload.agent_trace.length > 0) {
-          const compactTrace = payload.agent_trace
-            .map((step) => `${step.step}:${step.phase}`)
-            .join(" -> ");
-          appendMessage("bot", `Trace: ${compactTrace}`);
-        }
       } catch (error) {
         setStatus("Error");
         appendMessage("bot", "Network request failed.");

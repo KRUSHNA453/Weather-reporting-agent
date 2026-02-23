@@ -36,6 +36,28 @@ PERSONAS: dict[str, dict[str, Any]] = {
             "Use compact technical wording.",
         ],
     },
+    "teacher": {
+        "id": "teacher",
+        "name": "Weather Teacher",
+        "identity": "An explainer who keeps concepts simple",
+        "tone": "clear and educational",
+        "style_rules": [
+            "Use plain wording.",
+            "Add one short practical explanation.",
+            "Stay concise.",
+        ],
+    },
+    "safety": {
+        "id": "safety",
+        "name": "Safety Advisor",
+        "identity": "A weather safety-focused advisor",
+        "tone": "calm and precaution-oriented",
+        "style_rules": [
+            "Highlight rain, storms, and alert risk first.",
+            "Give one short safety note when needed.",
+            "Avoid long paragraphs.",
+        ],
+    },
 }
 
 
@@ -68,10 +90,21 @@ def apply_persona_style(
 
     if style == "brief":
         payload = first_sentence or payload
-    # Detailed mode keeps core answer content without appending internal memory context.
+    elif style not in {"balanced", "detailed"}:
+        payload = first_sentence or payload
 
     persona_id = str(persona.get("id") or DEFAULT_PERSONA_ID)
-    if persona_id == "analyst" and style == "detailed":
-        payload = f"Weather analysis: {payload}"
+    lowered = payload.lower()
+    if persona_id == "friendly":
+        payload = f"Friendly update: {payload}"
+    elif persona_id == "analyst":
+        payload = f"Data view: {payload}"
+    elif persona_id == "teacher":
+        payload = f"Weather class note: {payload}"
+    elif persona_id == "safety":
+        if any(token in lowered for token in ("storm", "alert", "rain likely", "chance of rain")):
+            payload = f"Safety briefing: {payload} Please carry rain protection and monitor local alerts."
+        else:
+            payload = f"Safety briefing: {payload}"
 
     return payload.strip()
