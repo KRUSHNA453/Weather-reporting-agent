@@ -232,6 +232,35 @@
       font-size: 0.84rem;
     }
 
+    .prefs-row {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .prefs-row.compact {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .prefs-row input,
+    .prefs-row select,
+    .prefs-row label {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font: inherit;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .prefs-row label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+
     @media (max-width: 720px) {
       body {
         padding: 12px;
@@ -246,6 +275,11 @@
       }
 
       .composer-row {
+        grid-template-columns: 1fr;
+      }
+
+      .prefs-row,
+      .prefs-row.compact {
         grid-template-columns: 1fr;
       }
 
@@ -285,12 +319,29 @@
     </section>
 
     <section class="composer">
+      <div class="prefs-row">
+        <input id="userIdInput" value="guest" maxlength="64" placeholder="User ID (memory key)" />
+        <select id="personaSelect"></select>
+        <select id="unitsSelect">
+          <option value="metric">Units: Metric</option>
+          <option value="imperial">Units: Imperial</option>
+        </select>
+        <select id="styleSelect">
+          <option value="balanced">Style: Balanced</option>
+          <option value="brief">Style: Brief</option>
+          <option value="detailed">Style: Detailed</option>
+        </select>
+      </div>
+      <div class="prefs-row compact">
+        <label><input id="rememberToggle" type="checkbox" checked /> Remember long-term memory</label>
+        <label><input id="traceToggle" type="checkbox" /> Include reasoning trace</label>
+      </div>
       <div class="composer-row">
         <textarea id="messageInput" placeholder="Type your weather question..." maxlength="500"></textarea>
         <button id="sendBtn" type="button">Send</button>
       </div>
       <div class="hint">
-        Uses <code>POST /chat</code> with <code>{ "message": "..." }</code>. Press Enter to send.
+        Uses autonomous loop + tools. Press Enter to send.
       </div>
     </section>
   </main>
@@ -304,6 +355,12 @@
     const tempValueEl = document.getElementById("tempValue");
     const humidityValueEl = document.getElementById("humidityValue");
     const windValueEl = document.getElementById("windValue");
+    const userIdInput = document.getElementById("userIdInput");
+    const personaSelect = document.getElementById("personaSelect");
+    const unitsSelect = document.getElementById("unitsSelect");
+    const styleSelect = document.getElementById("styleSelect");
+    const rememberToggle = document.getElementById("rememberToggle");
+    const traceToggle = document.getElementById("traceToggle");
 
     function setStatus(state) {
       statusEl.textContent = state;
@@ -327,13 +384,47 @@
     }
 
     function renderWeatherDetails(payload) {
-      const temp = typeof payload.temperature_c === "number" ? `${payload.temperature_c.toFixed(1)} C` : "N/A";
+      const temperature = typeof payload.temperature === "number" ? payload.temperature : payload.temperature_c;
+      const tempUnit = payload.temperature_unit || "C";
+      const temp = typeof temperature === "number" ? `${temperature.toFixed(1)} ${tempUnit}` : "N/A";
       const humidity = typeof payload.humidity_percent === "number" ? `${payload.humidity_percent}%` : "N/A";
-      const wind = typeof payload.wind_speed_mps === "number" ? `${payload.wind_speed_mps.toFixed(1)} m/s` : "N/A";
+      const windValue = typeof payload.wind_speed === "number" ? payload.wind_speed : payload.wind_speed_mps;
+      const windUnit = payload.wind_speed_unit || "m/s";
+      const wind = typeof windValue === "number" ? `${windValue.toFixed(1)} ${windUnit}` : "N/A";
 
       tempValueEl.textContent = temp;
       humidityValueEl.textContent = humidity;
       windValueEl.textContent = wind;
+    }
+
+    async function loadPersonas() {
+      const fallback = [
+        { id: "professional", name: "Professional Forecaster" },
+        { id: "friendly", name: "Friendly Guide" },
+        { id: "analyst", name: "Data Analyst" },
+      ];
+
+      let personas = fallback;
+      try {
+        const response = await fetch("/personas");
+        if (response.ok) {
+          const payload = await response.json();
+          if (payload && Array.isArray(payload.personas) && payload.personas.length > 0) {
+            personas = payload.personas;
+          }
+        }
+      } catch (_) {}
+
+      personaSelect.innerHTML = "";
+      personas.forEach((persona) => {
+        const option = document.createElement("option");
+        option.value = persona.id;
+        option.textContent = `Persona: ${persona.name || persona.id}`;
+        if (persona.id === "professional") {
+          option.selected = true;
+        }
+        personaSelect.appendChild(option);
+      });
     }
 
     async function sendMessage() {
@@ -356,7 +447,17 @@
         const response = await fetch("/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message }),
+          body: JSON.stringify({
+            message,
+            user_id: (userIdInput.value || "guest").trim() || "guest",
+            persona_id: personaSelect.value || "professional",
+            remember_memory: !!rememberToggle.checked,
+            include_trace: !!traceToggle.checked,
+            preferences: {
+              units: unitsSelect.value || "metric",
+              response_style: styleSelect.value || "balanced",
+            },
+          }),
         });
 
         let payload = null;
@@ -378,8 +479,17 @@
         const botText = payload.response || "No response text received.";
         appendMessage("bot", botText);
         setStatus("Success");
-        metaEl.textContent = `city=${payload.city || "unknown"}`;
+        const profile = payload.memory_profile || {};
+        const profileCity = profile.preferred_city ? ` | memory_city=${profile.preferred_city}` : "";
+        metaEl.textContent = `city=${payload.city || "unknown"} | persona=${payload.persona_id || "professional"} | units=${payload.units || "metric"}${profileCity}`;
         renderWeatherDetails(payload || {});
+
+        if (Array.isArray(payload.agent_trace) && payload.agent_trace.length > 0) {
+          const compactTrace = payload.agent_trace
+            .map((step) => `${step.step}:${step.phase}`)
+            .join(" -> ");
+          appendMessage("bot", `Trace: ${compactTrace}`);
+        }
       } catch (error) {
         setStatus("Error");
         appendMessage("bot", "Network request failed.");
@@ -391,6 +501,7 @@
     }
 
     resetWeatherDetails();
+    loadPersonas();
     sendBtn.addEventListener("click", sendMessage);
     messageInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {

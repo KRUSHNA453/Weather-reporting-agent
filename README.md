@@ -9,8 +9,11 @@
 |   `-- index.html            # Simple UI
 |-- weather_agent/
 |   |-- api.py                # FastAPI routes and response logic
+|   |-- autonomous_agent.py   # Plan -> tool -> observe -> reflect loop
 |   |-- agent_service.py      # LLM agent setup
 |   |-- config.py             # Environment and app constants
+|   |-- memory_store.py       # SQLite long-term memory (profiles + history)
+|   |-- personas.py           # Persona catalog and style adaptation
 |   |-- prompts.py            # Agent persona/system prompt
 |   |-- schemas.py            # Request/response models
 |   `-- weather_service.py    # OpenWeather API integration
@@ -28,6 +31,36 @@ uvicorn app:app --reload
 Open:
 - UI: `http://127.0.0.1:8000/ui`
 - Docs: `http://127.0.0.1:8000/docs`
+
+## Autonomous Loop + Memory
+
+- The chat endpoint now runs a multi-step autonomous loop:
+  - `plan -> tool-call -> observe -> reflect -> final-answer`
+- Trace steps are logged server-side and can be returned in API response with `include_trace=true`.
+- User preferences and conversation memory are persisted in SQLite (`agent_memory.db`) by `user_id`.
+- Personas are selectable (`professional`, `friendly`, `analyst`) and combined with response style (`brief`, `balanced`, `detailed`).
+
+### Example `POST /chat`
+
+```json
+{
+  "message": "What is the future weather in Chennai?",
+  "user_id": "demo-user",
+  "persona_id": "analyst",
+  "remember_memory": true,
+  "include_trace": true,
+  "preferences": {
+    "city": "Chennai",
+    "units": "imperial",
+    "response_style": "detailed"
+  }
+}
+```
+
+### Extra endpoints
+
+- `GET /personas`
+- `GET /users/{user_id}/profile`
 
 ## Environment Variables
 

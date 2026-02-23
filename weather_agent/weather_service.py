@@ -775,7 +775,43 @@ def _rain_statement(probability: int | float | None, location: str, time_scope: 
     return f"{verdict} Rain probability in {location} for {time_scope}: {probability_int}%."
 
 
-def build_weather_answer_from_tool(user_input: str, tool_payload: dict[str, Any]) -> str:
+def _normalize_units(units: str | None) -> str:
+    unit_value = str(units or "metric").strip().lower()
+    if unit_value not in {"metric", "imperial"}:
+        return "metric"
+    return unit_value
+
+
+def _temperature_unit_label(units: str) -> str:
+    return "F" if units == "imperial" else "C"
+
+
+def _wind_unit_label(units: str) -> str:
+    return "mph" if units == "imperial" else "m/s"
+
+
+def _convert_temperature(temp_c: Any, units: str) -> float | None:
+    if not isinstance(temp_c, (int, float)):
+        return None
+    value = float(temp_c)
+    if units == "imperial":
+        value = (value * 9.0 / 5.0) + 32.0
+    return round(value, 1)
+
+
+def _convert_wind_speed(wind_mps: Any, units: str) -> float | None:
+    if not isinstance(wind_mps, (int, float)):
+        return None
+    value = float(wind_mps)
+    if units == "imperial":
+        value = value * 2.23694
+    return round(value, 1)
+
+
+def build_weather_answer_from_tool(user_input: str, tool_payload: dict[str, Any], units: str = "metric") -> str:
+    normalized_units = _normalize_units(units)
+    temp_unit = _temperature_unit_label(normalized_units)
+    wind_unit = _wind_unit_label(normalized_units)
     status = str(tool_payload.get("status") or "").lower()
     if status == "needs_location":
         return "Please specify the location (city) for the weather request."
@@ -796,14 +832,22 @@ def build_weather_answer_from_tool(user_input: str, tool_payload: dict[str, Any]
     if not any(flags.values()):
         flags["climate"] = True
 
-    temp_now = current.get("temperature_c")
+    temp_now = _convert_temperature(current.get("temperature_c"), normalized_units)
     humidity_now = current.get("humidity_percent")
-    wind_now = current.get("wind_speed_mps")
+    wind_now = _convert_wind_speed(current.get("wind_speed_mps"), normalized_units)
     wind_dir = current.get("wind_direction")
     condition_now = str(current.get("description") or "condition unavailable")
 
-    day_min = daily[0].get("temp_min_c") if daily and isinstance(daily[0], dict) else None
-    day_max = daily[0].get("temp_max_c") if daily and isinstance(daily[0], dict) else None
+    day_min = (
+        _convert_temperature(daily[0].get("temp_min_c"), normalized_units)
+        if daily and isinstance(daily[0], dict)
+        else None
+    )
+    day_max = (
+        _convert_temperature(daily[0].get("temp_max_c"), normalized_units)
+        if daily and isinstance(daily[0], dict)
+        else None
+    )
     rain_probability = tool_payload.get("rain_probability_percent")
     storm_possible = bool(tool_payload.get("storm_possible"))
 
@@ -827,9 +871,9 @@ def build_weather_answer_from_tool(user_input: str, tool_payload: dict[str, Any]
         primary_metric = "alert"
     elif flags["temperature"]:
         if isinstance(day_min, (int, float)) and isinstance(day_max, (int, float)):
-            first_answer = f"Temperature in {location} for {time_scope}: {day_min} C to {day_max} C."
+            first_answer = f"Temperature in {location} for {time_scope}: {day_min} {temp_unit} to {day_max} {temp_unit}."
         elif isinstance(temp_now, (int, float)):
-            first_answer = f"Current temperature in {location}: {temp_now} C."
+            first_answer = f"Current temperature in {location}: {temp_now} {temp_unit}."
         else:
             first_answer = f"Temperature data is unavailable for {location}."
         primary_metric = "temperature"
@@ -842,7 +886,7 @@ def build_weather_answer_from_tool(user_input: str, tool_payload: dict[str, Any]
     elif flags["wind"]:
         if isinstance(wind_now, (int, float)):
             direction = f" {wind_dir}" if isinstance(wind_dir, str) and wind_dir else ""
-            first_answer = f"Current wind in {location}: {wind_now} m/s{direction}."
+            first_answer = f"Current wind in {location}: {wind_now} {wind_unit}{direction}."
         else:
             first_answer = f"Wind data is unavailable for {location}."
         primary_metric = "wind"
@@ -850,17 +894,22 @@ def build_weather_answer_from_tool(user_input: str, tool_payload: dict[str, Any]
         granularity = str(time_reference.get("granularity") or "daily")
         if granularity == "hourly" and hourly:
             first_item = hourly[0] if isinstance(hourly[0], dict) else {}
+            first_hourly_temp = _convert_temperature(first_item.get("temperature_c"), normalized_units)
             first_answer = (
                 f"Hourly forecast for {location} {time_scope}: "
-                f"{first_item.get('time', 'next hour')} {first_item.get('temperature_c', 'N/A')} C, "
+                f"{first_item.get('time', 'next hour')} {first_hourly_temp if first_hourly_temp is not None else 'N/A'} {temp_unit}, "
                 f"{first_item.get('description', 'No description')}."
             )
         elif daily:
             first_item = daily[0] if isinstance(daily[0], dict) else {}
+            first_day_min = _convert_temperature(first_item.get("temp_min_c"), normalized_units)
+            first_day_max = _convert_temperature(first_item.get("temp_max_c"), normalized_units)
             first_answer = (
                 f"Forecast for {location} ({time_scope}): "
-                f"{first_item.get('date', 'next day')} {first_item.get('temp_min_c', 'N/A')}-"
-                f"{first_item.get('temp_max_c', 'N/A')} C, {first_item.get('description', 'No description')}."
+                f"{first_item.get('date', 'next day')} "
+                f"{first_day_min if first_day_min is not None else 'N/A'}-"
+                f"{first_day_max if first_day_max is not None else 'N/A'} {temp_unit}, "
+                f"{first_item.get('description', 'No description')}."
             )
         else:
             first_answer = f"Forecast data is unavailable for {location}."
@@ -872,14 +921,14 @@ def build_weather_answer_from_tool(user_input: str, tool_payload: dict[str, Any]
     details: list[str] = []
     if flags["temperature"] and primary_metric != "temperature":
         if isinstance(day_min, (int, float)) and isinstance(day_max, (int, float)):
-            details.append(f"Temperature range: {day_min} C to {day_max} C.")
+            details.append(f"Temperature range: {day_min} {temp_unit} to {day_max} {temp_unit}.")
         elif isinstance(temp_now, (int, float)):
-            details.append(f"Temperature now: {temp_now} C.")
+            details.append(f"Temperature now: {temp_now} {temp_unit}.")
     if flags["humidity"] and primary_metric != "humidity" and isinstance(humidity_now, (int, float)):
         details.append(f"Humidity: {int(humidity_now)}%.")
     if flags["wind"] and primary_metric != "wind" and isinstance(wind_now, (int, float)):
         direction = f" {wind_dir}" if isinstance(wind_dir, str) and wind_dir else ""
-        details.append(f"Wind: {wind_now} m/s{direction}.")
+        details.append(f"Wind: {wind_now} {wind_unit}{direction}.")
     if flags["rain"] and primary_metric != "rain" and isinstance(rain_probability, (int, float)):
         details.append(f"Rain probability: {int(round(float(rain_probability)))}%.")
 
@@ -887,7 +936,9 @@ def build_weather_answer_from_tool(user_input: str, tool_payload: dict[str, Any]
         granularity = str(time_reference.get("granularity") or "daily")
         if granularity == "hourly" and hourly:
             points = [
-                f"{item.get('time')}: {item.get('temperature_c')} C, {item.get('description')}, rain {item.get('precip_probability_percent')}%"
+                f"{item.get('time')}: "
+                f"{_convert_temperature(item.get('temperature_c'), normalized_units)} {temp_unit}, "
+                f"{item.get('description')}, rain {item.get('precip_probability_percent')}%"
                 for item in hourly[:3]
                 if isinstance(item, dict)
             ]
@@ -895,7 +946,10 @@ def build_weather_answer_from_tool(user_input: str, tool_payload: dict[str, Any]
                 details.append("Hourly: " + "; ".join(points) + ".")
         elif daily:
             points = [
-                f"{item.get('date')}: {item.get('temp_min_c')}-{item.get('temp_max_c')} C, {item.get('description')}, rain {item.get('precip_probability_percent')}%"
+                f"{item.get('date')}: "
+                f"{_convert_temperature(item.get('temp_min_c'), normalized_units)}-"
+                f"{_convert_temperature(item.get('temp_max_c'), normalized_units)} {temp_unit}, "
+                f"{item.get('description')}, rain {item.get('precip_probability_percent')}%"
                 for item in daily[:3]
                 if isinstance(item, dict)
             ]
@@ -928,7 +982,10 @@ def build_weather_answer_from_tool(user_input: str, tool_payload: dict[str, Any]
     return first_answer + " " + " ".join(details)
 
 
-def chat_fields_from_tool_payload(tool_payload: dict[str, Any]) -> dict[str, Any]:
+def chat_fields_from_tool_payload(tool_payload: dict[str, Any], units: str = "metric") -> dict[str, Any]:
+    normalized_units = _normalize_units(units)
+    temp_unit = _temperature_unit_label(normalized_units)
+    wind_unit = _wind_unit_label(normalized_units)
     current = tool_payload.get("current") if isinstance(tool_payload.get("current"), dict) else {}
     daily = tool_payload.get("daily_forecast") if isinstance(tool_payload.get("daily_forecast"), list) else []
     forecast_days: list[dict[str, Any]] = []
@@ -942,17 +999,25 @@ def chat_fields_from_tool_payload(tool_payload: dict[str, Any]) -> dict[str, Any
                 "date": str(item.get("date") or "unknown"),
                 "temp_min_c": float(item["temp_min_c"]),
                 "temp_max_c": float(item["temp_max_c"]),
+                "temp_min": _convert_temperature(item["temp_min_c"], normalized_units),
+                "temp_max": _convert_temperature(item["temp_max_c"], normalized_units),
                 "description": str(item.get("description") or "No description"),
             }
         )
+
+    temperature_c = current.get("temperature_c") if isinstance(current.get("temperature_c"), (int, float)) else None
+    wind_speed_mps = current.get("wind_speed_mps") if isinstance(current.get("wind_speed_mps"), (int, float)) else None
     return {
         "city": str(tool_payload.get("location") or "unknown"),
-        "temperature_c": current.get("temperature_c") if isinstance(current.get("temperature_c"), (int, float)) else None,
+        "temperature_c": temperature_c,
+        "temperature": _convert_temperature(temperature_c, normalized_units),
+        "temperature_unit": temp_unit,
         "humidity_percent": current.get("humidity_percent")
         if isinstance(current.get("humidity_percent"), (int, float))
         else None,
-        "wind_speed_mps": current.get("wind_speed_mps")
-        if isinstance(current.get("wind_speed_mps"), (int, float))
-        else None,
+        "wind_speed_mps": wind_speed_mps,
+        "wind_speed": _convert_wind_speed(wind_speed_mps, normalized_units),
+        "wind_speed_unit": wind_unit,
+        "units": normalized_units,
         "forecast": forecast_days,
     }
