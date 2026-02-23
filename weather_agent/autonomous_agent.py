@@ -3,7 +3,6 @@ from typing import Any
 
 from .memory_store import (
     append_conversation,
-    get_recent_conversation,
     get_user_profile,
     normalize_user_id,
     upsert_user_profile,
@@ -161,19 +160,11 @@ def run_autonomous_weather_agent(
     )
     base_answer = build_weather_answer_from_tool(user_input, tool_payload, units=effective_units)
 
-    recent_memory = get_recent_conversation(safe_user_id, limit=3)
-    context_bits = []
-    if recent_memory:
-        context_bits.append(f"memory_messages={len(recent_memory)}")
-    if profile.get("preferred_city"):
-        context_bits.append(f"preferred_city={profile.get('preferred_city')}")
-    context_summary = ", ".join(context_bits) if context_bits else None
-
     final_answer = apply_persona_style(
         base_answer,
         persona=persona,
         response_style=effective_style,
-        include_context=context_summary if effective_style == "detailed" else None,
+        include_context=None,
     )
     _trace_step(
         trace,

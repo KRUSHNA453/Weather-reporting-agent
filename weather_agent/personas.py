@@ -68,16 +68,10 @@ def apply_persona_style(
 
     if style == "brief":
         payload = first_sentence or payload
-    elif style == "detailed":
-        context_note = str(include_context or "").strip()
-        if context_note:
-            payload = f"{payload} Context: {context_note}"
+    # Detailed mode keeps core answer content without appending internal memory context.
 
     persona_id = str(persona.get("id") or DEFAULT_PERSONA_ID)
-    if persona_id == "friendly":
-        if not payload.lower().startswith("here is"):
-            payload = f"Here is your weather update: {payload}"
-    elif persona_id == "analyst":
+    if persona_id == "analyst" and style == "detailed":
         payload = f"Weather analysis: {payload}"
 
     return payload.strip()

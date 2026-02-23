@@ -84,7 +84,7 @@ def get_user_profile(user_id: str | None) -> dict[str, Any]:
             "persona_id": "professional",
             "preferred_city": None,
             "units": "metric",
-            "response_style": "balanced",
+            "response_style": "brief",
             "updated_at": None,
         }
 
@@ -110,14 +110,14 @@ def upsert_user_profile(
 
     merged_persona = str(persona_id or existing["persona_id"] or "professional").strip().lower()
     merged_units = str(units or existing["units"] or "metric").strip().lower()
-    merged_style = str(response_style or existing["response_style"] or "balanced").strip().lower()
+    merged_style = str(response_style or existing["response_style"] or "brief").strip().lower()
     merged_city = preferred_city if preferred_city is not None else existing["preferred_city"]
     timestamp = _utc_now()
 
     if merged_units not in {"metric", "imperial"}:
         merged_units = "metric"
     if merged_style not in {"brief", "balanced", "detailed"}:
-        merged_style = "balanced"
+        merged_style = "brief"
 
     with _connect() as conn:
         conn.execute(

@@ -327,13 +327,13 @@
           <option value="imperial">Units: Imperial</option>
         </select>
         <select id="styleSelect">
-          <option value="balanced">Style: Balanced</option>
           <option value="brief">Style: Brief</option>
+          <option value="balanced">Style: Balanced</option>
           <option value="detailed">Style: Detailed</option>
         </select>
       </div>
       <div class="prefs-row compact">
-        <label><input id="rememberToggle" type="checkbox" checked /> Remember long-term memory</label>
+        <label><input id="rememberToggle" type="checkbox" /> Remember long-term memory</label>
         <label><input id="traceToggle" type="checkbox" /> Include reasoning trace</label>
       </div>
       <div class="composer-row">
@@ -455,7 +455,7 @@
             include_trace: !!traceToggle.checked,
             preferences: {
               units: unitsSelect.value || "metric",
-              response_style: styleSelect.value || "balanced",
+              response_style: styleSelect.value || "brief",
             },
           }),
         });
@@ -479,9 +479,7 @@
         const botText = payload.response || "No response text received.";
         appendMessage("bot", botText);
         setStatus("Success");
-        const profile = payload.memory_profile || {};
-        const profileCity = profile.preferred_city ? ` | memory_city=${profile.preferred_city}` : "";
-        metaEl.textContent = `city=${payload.city || "unknown"} | persona=${payload.persona_id || "professional"} | units=${payload.units || "metric"}${profileCity}`;
+        metaEl.textContent = `city=${payload.city || "unknown"} | units=${payload.units || "metric"}`;
         renderWeatherDetails(payload || {});
 
         if (Array.isArray(payload.agent_trace) && payload.agent_trace.length > 0) {
