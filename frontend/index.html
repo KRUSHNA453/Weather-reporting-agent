@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weather Agent UI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Source+Serif+4:wght@500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-1: #f2efe7;
+      --bg-2: #dce8f5;
+      --text: #17202a;
+      --muted: #52606d;
+      --panel: rgba(255, 255, 255, 0.8);
+      --border: rgba(23, 32, 42, 0.12);
+      --accent: #005f73;
+      --accent-soft: #e6f3f5;
+      --ok: #1d6f42;
+      --bad: #9f2d2d;
+      --user-bg: #005f73;
+      --bot-bg: #f6f8fb;
+      --shadow: 0 14px 36px rgba(23, 32, 42, 0.12);
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Manrope", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 18% 8%, rgba(0, 95, 115, 0.18), transparent 34%),
+        radial-gradient(circle at 85% 18%, rgba(238, 155, 0, 0.17), transparent 30%),
+        linear-gradient(140deg, var(--bg-1), var(--bg-2));
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .panel {
+      width: min(900px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(6px);
+      overflow: hidden;
+      animation: rise 360ms ease-out;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      max-height: calc(100vh - 48px);
+    }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .header {
+      padding: 22px 22px 10px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.38));
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.35rem, 2.7vw, 1.95rem);
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-family: "Source Serif 4", Georgia, serif;
+    }
+
+    .body {
+      padding: 14px 18px;
+      overflow: auto;
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .chat-log {
+      display: grid;
+      gap: 10px;
+    }
+
+    .msg {
+      max-width: min(680px, 92%);
+      border-radius: 14px;
+      padding: 10px 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      border: 1px solid var(--border);
+    }
+
+    .msg.user {
+      justify-self: end;
+      background: var(--user-bg);
+      border-color: var(--user-bg);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .msg.bot {
+      justify-self: start;
+      background: var(--bot-bg);
+      color: var(--text);
+      border-bottom-left-radius: 4px;
+    }
+
+    .status {
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .status.ok {
+      color: var(--ok);
+    }
+
+    .status.error {
+      color: var(--bad);
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .metric-card {
+      background: var(--accent-soft);
+      border: 1px solid rgba(0, 95, 115, 0.15);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .metric-value {
+      font-size: 1.03rem;
+      font-weight: 800;
+    }
+
+    .composer {
+      border-top: 1px solid var(--border);
+      padding: 12px 14px 14px;
+      background: rgba(255, 255, 255, 0.55);
+      display: grid;
+      gap: 9px;
+    }
+
+    .composer-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 52px;
+      max-height: 180px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font: inherit;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.94);
+    }
+
+    textarea:focus {
+      outline: 2px solid rgba(0, 95, 115, 0.25);
+      border-color: var(--accent);
+    }
+
+    button {
+      border: none;
+      border-radius: 12px;
+      padding: 0 16px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      transition: transform 120ms ease, filter 120ms ease;
+    }
+
+    button:hover {
+      filter: brightness(1.07);
+      transform: translateY(-1px);
+    }
+
+    button:disabled {
+      opacity: 0.65;
+      cursor: wait;
+      transform: none;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: 12px;
+      }
+
+      .panel {
+        max-height: calc(100vh - 24px);
+      }
+
+      .metrics {
+        grid-template-columns: 1fr;
+      }
+
+      .composer-row {
+        grid-template-columns: 1fr;
+      }
+
+      button {
+        height: 42px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <section class="header">
+      <h1>Weather Agent</h1>
+      <p class="subtitle">Chat naturally: try "What is the future weather in Chennai?"</p>
+    </section>
+
+    <section class="body">
+      <div id="status" class="status">Idle</div>
+      <div id="chatLog" class="chat-log">
+        <div class="msg bot">Ask me about weather in any city.</div>
+      </div>
+      <div id="meta" class="meta"></div>
+      <div class="metrics">
+        <div class="metric-card">
+          <span class="metric-label">Temperature</span>
+          <span id="tempValue" class="metric-value">-</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Humidity</span>
+          <span id="humidityValue" class="metric-value">-</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Wind Speed</span>
+          <span id="windValue" class="metric-value">-</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="composer">
+      <div class="composer-row">
+        <textarea id="messageInput" placeholder="Type your weather question..." maxlength="500"></textarea>
+        <button id="sendBtn" type="button">Send</button>
+      </div>
+      <div class="hint">
+        Uses <code>POST /chat</code> with <code>{ "message": "..." }</code>. Press Enter to send.
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const messageInput = document.getElementById("messageInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const statusEl = document.getElementById("status");
+    const chatLogEl = document.getElementById("chatLog");
+    const metaEl = document.getElementById("meta");
+    const tempValueEl = document.getElementById("tempValue");
+    const humidityValueEl = document.getElementById("humidityValue");
+    const windValueEl = document.getElementById("windValue");
+
+    function setStatus(state) {
+      statusEl.textContent = state;
+      statusEl.classList.remove("ok", "error");
+      if (state === "Success") statusEl.classList.add("ok");
+      if (state === "Error") statusEl.classList.add("error");
+    }
+
+    function appendMessage(role, text) {
+      const bubble = document.createElement("div");
+      bubble.className = `msg ${role}`;
+      bubble.textContent = text;
+      chatLogEl.appendChild(bubble);
+      bubble.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+
+    function resetWeatherDetails() {
+      tempValueEl.textContent = "-";
+      humidityValueEl.textContent = "-";
+      windValueEl.textContent = "-";
+    }
+
+    function renderWeatherDetails(payload) {
+      const temp = typeof payload.temperature_c === "number" ? `${payload.temperature_c.toFixed(1)} C` : "N/A";
+      const humidity = typeof payload.humidity_percent === "number" ? `${payload.humidity_percent}%` : "N/A";
+      const wind = typeof payload.wind_speed_mps === "number" ? `${payload.wind_speed_mps.toFixed(1)} m/s` : "N/A";
+
+      tempValueEl.textContent = temp;
+      humidityValueEl.textContent = humidity;
+      windValueEl.textContent = wind;
+    }
+
+    async function sendMessage() {
+      const message = messageInput.value.trim();
+      if (!message) {
+        setStatus("Error");
+        appendMessage("bot", "Please type a weather question.");
+        messageInput.focus();
+        return;
+      }
+
+      appendMessage("user", message);
+      messageInput.value = "";
+      sendBtn.disabled = true;
+      setStatus("Loading");
+      metaEl.textContent = "Fetching response...";
+      resetWeatherDetails();
+
+      try {
+        const response = await fetch("/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message }),
+        });
+
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch (_) {
+          payload = null;
+        }
+
+        if (!response.ok) {
+          const detail = payload && payload.detail ? String(payload.detail) : `HTTP ${response.status}`;
+          setStatus("Error");
+          appendMessage("bot", detail);
+          metaEl.textContent = "";
+          resetWeatherDetails();
+          return;
+        }
+
+        const botText = payload.response || "No response text received.";
+        appendMessage("bot", botText);
+        setStatus("Success");
+        metaEl.textContent = `city=${payload.city || "unknown"}`;
+        renderWeatherDetails(payload || {});
+      } catch (error) {
+        setStatus("Error");
+        appendMessage("bot", "Network request failed.");
+        metaEl.textContent = `reason=${String(error)}`;
+        resetWeatherDetails();
+      } finally {
+        sendBtn.disabled = false;
+      }
+    }
+
+    resetWeatherDetails();
+    sendBtn.addEventListener("click", sendMessage);
+    messageInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+      }
+    });
+  </script>
+</body>
+</html>
+
+
