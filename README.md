@@ -41,7 +41,7 @@ This repo includes a `render.yaml` Blueprint for Render.
 1. Push this project to a GitHub/GitLab repository.
 2. In Render, create a new Blueprint service and select the repo.
 3. Set `OPENWEATHER_API_KEY` in Render environment variables.
-4. Optional: set `HUGGINGFACE_API_KEY` and set `INSTALL_LLM=true` to enable full LLM mode.
+4. Set `HUGGINGFACE_API_KEY` (or `HUGGINGFACEHUB_API_TOKEN`). `INSTALL_LLM` is enabled by default in `render.yaml`.
 
 After deploy:
 - Base URL: `https://<your-service>.onrender.com`

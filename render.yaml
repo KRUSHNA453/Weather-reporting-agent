@@ -19,4 +19,4 @@ services:
       - key: HUGGINGFACEHUB_API_TOKEN
         sync: false
       - key: INSTALL_LLM
-        value: "false"
+        value: "true"
