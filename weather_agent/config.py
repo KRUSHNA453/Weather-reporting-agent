@@ -18,3 +18,21 @@ HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN") or os.getenv("HUGGINGF
 HUGGINGFACE_REPO_ID = "mistralai/Mistral-7B-Instruct-v0.2"
 
 AGENT_MEMORY_DB_PATH = os.getenv("AGENT_MEMORY_DB_PATH")
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = str(raw).strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+DEFAULT_REMEMBER_MEMORY = _env_flag("DEFAULT_REMEMBER_MEMORY", False)
+DEFAULT_INCLUDE_TRACE = _env_flag("DEFAULT_INCLUDE_TRACE", False)
+# Debug gate: trace is never returned unless this is true.
+TRACE_UI_ENABLED = _env_flag("TRACE_UI_ENABLED", False)

@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Any
 
 from .agent_service import invoke_llm_weather_agent
@@ -6,6 +7,8 @@ from .memory_store import (
     append_conversation,
     get_user_profile,
     normalize_user_id,
+    retrieve_relevant_memories,
+    upsert_memory_fact,
     upsert_user_profile,
 )
 from .personas import apply_persona_style, resolve_persona
@@ -33,6 +36,44 @@ AGENT_FAILURE_MARKERS = (
     "check a weather website",
     "provide the data",
     "service unavailable",
+)
+
+ACTIVITY_KEYWORDS = (
+    "photography",
+    "running",
+    "jogging",
+    "cycling",
+    "hiking",
+    "trekking",
+    "cricket",
+    "football",
+    "badminton",
+    "camping",
+    "fishing",
+    "picnic",
+    "travel",
+    "walking",
+)
+
+SCHEDULE_KEYWORDS = (
+    "weekend",
+    "weekday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+    "morning",
+    "afternoon",
+    "evening",
+    "night",
+)
+
+WEATHER_PREFERENCE_PATTERNS = (
+    r"\b(no rain|avoid rain|clear sky|cool weather|less humidity|low wind)\b",
+    r"\b(good for|best for)\s+([A-Za-z\s]{2,40})\b",
 )
 
 
@@ -93,6 +134,98 @@ def _looks_too_verbose(text: str) -> bool:
     return False
 
 
+def _extract_durable_memory_facts(
+    user_input: str,
+    tool_payload: dict[str, Any],
+    profile: dict[str, Any],
+) -> list[dict[str, Any]]:
+    facts: list[dict[str, Any]] = []
+    lowered = str(user_input or "").lower()
+
+    location = tool_payload.get("location")
+    if isinstance(location, str) and location.strip():
+        facts.append(
+            {
+                "memory_type": "preferred_city",
+                "value": location.strip(),
+                "importance": 2.6,
+                "source_message": user_input,
+            }
+        )
+        facts.append(
+            {
+                "memory_type": "location_preference",
+                "value": location.strip(),
+                "importance": 2.0,
+                "source_message": user_input,
+            }
+        )
+
+    for keyword in ACTIVITY_KEYWORDS:
+        if keyword in lowered:
+            facts.append(
+                {
+                    "memory_type": "activity_interest",
+                    "value": keyword,
+                    "importance": 1.6,
+                    "source_message": user_input,
+                }
+            )
+
+    for keyword in SCHEDULE_KEYWORDS:
+        if keyword in lowered:
+            facts.append(
+                {
+                    "memory_type": "schedule_pattern",
+                    "value": keyword,
+                    "importance": 1.3,
+                    "source_message": user_input,
+                }
+            )
+
+    for pattern in WEATHER_PREFERENCE_PATTERNS:
+        for match in re.findall(pattern, lowered):
+            value = ""
+            if isinstance(match, tuple):
+                value = " ".join(part for part in match if isinstance(part, str) and part.strip()).strip()
+            elif isinstance(match, str):
+                value = match.strip()
+            if value:
+                facts.append(
+                    {
+                        "memory_type": "weather_preference",
+                        "value": value,
+                        "importance": 1.4,
+                        "source_message": user_input,
+                    }
+                )
+
+    preferred_city = profile.get("preferred_city")
+    if isinstance(preferred_city, str) and preferred_city.strip():
+        facts.append(
+            {
+                "memory_type": "preferred_city",
+                "value": preferred_city.strip(),
+                "importance": 2.0,
+                "source_message": "profile",
+            }
+        )
+    return facts
+
+
+def _memory_snippets_for_prompt(relevant_memories: list[dict[str, Any]]) -> list[str]:
+    snippets: list[str] = []
+    for item in relevant_memories[:8]:
+        if not isinstance(item, dict):
+            continue
+        memory_type = str(item.get("memory_type") or "").strip()
+        value = str(item.get("value") or "").strip()
+        if not memory_type or not value:
+            continue
+        snippets.append(f"{memory_type}={value}")
+    return snippets
+
+
 def run_autonomous_weather_agent(
     user_input: str,
     city_hint: str | None,
@@ -135,6 +268,18 @@ def run_autonomous_weather_agent(
         },
     )
 
+    relevant_memories: list[dict[str, Any]] = []
+    if remember_memory:
+        relevant_memories = retrieve_relevant_memories(safe_user_id, query=user_input, limit=6)
+        _trace_step(
+            trace,
+            "memory-retrieval",
+            {
+                "retrieved": len(relevant_memories),
+                "memory_types": [str(item.get("memory_type")) for item in relevant_memories[:6] if isinstance(item, dict)],
+            },
+        )
+
     query = str(user_input or "").strip()
     if plan_city:
         query = _ensure_city_in_input(query, str(plan_city))
@@ -146,6 +291,8 @@ def run_autonomous_weather_agent(
         persona=persona,
         response_style=effective_style,
         memory_city=profile.get("preferred_city") if remember_memory else None,
+        profile_summary=profile if remember_memory else None,
+        memory_snippets=_memory_snippets_for_prompt(relevant_memories) if remember_memory else [],
     )
     if isinstance(llm_result, dict):
         _trace_step(
@@ -209,6 +356,7 @@ def run_autonomous_weather_agent(
                 "reason": "llm_missing_tool_payload_fallback_to_direct_tool",
             },
         )
+
     if not isinstance(llm_tool_payload, dict):
         for attempt in range(1, max_steps + 1):
             _trace_step(trace, "tool-call", {"attempt": attempt, "tool": "get_weather_forecast", "query": query})
@@ -296,11 +444,15 @@ def run_autonomous_weather_agent(
     )
     selected_answer = llm_response if use_llm_response else base_answer
 
+    context_label = None
+    if remember_memory and relevant_memories and effective_style == "detailed":
+        context_label = ", ".join(_memory_snippets_for_prompt(relevant_memories)[:3])
+
     final_answer = apply_persona_style(
         selected_answer,
         persona=persona,
         response_style=effective_style,
-        include_context=None,
+        include_context=context_label,
     )
     _trace_step(
         trace,
@@ -314,23 +466,34 @@ def run_autonomous_weather_agent(
     )
 
     discovered_city = tool_payload.get("location")
+    memory_profile: dict[str, Any] | None = None
     if remember_memory:
-        profile = upsert_user_profile(
+        memory_profile = upsert_user_profile(
             safe_user_id,
             persona_id=str(persona.get("id") or effective_persona_id),
             preferred_city=str(discovered_city or preferred_city or profile.get("preferred_city") or "").strip() or None,
             units=effective_units,
             response_style=effective_style,
         )
-        append_conversation(safe_user_id, "user", user_input)
+        source_turn = append_conversation(safe_user_id, "user", user_input)
         append_conversation(safe_user_id, "assistant", final_answer)
+
+        for fact in _extract_durable_memory_facts(user_input, tool_payload, memory_profile):
+            upsert_memory_fact(
+                safe_user_id,
+                memory_type=str(fact.get("memory_type") or ""),
+                value=str(fact.get("value") or ""),
+                importance=float(fact.get("importance") or 1.0),
+                source_turn=source_turn,
+                source_message=str(fact.get("source_message") or user_input),
+            )
 
     return {
         "response_text": final_answer,
         "tool_payload": tool_payload,
         "resolved_city": resolved_city,
         "trace": trace,
-        "profile": profile if remember_memory else None,
+        "profile": memory_profile if remember_memory else None,
         "persona_id": str(persona.get("id")),
         "units": effective_units,
         "response_style": effective_style,

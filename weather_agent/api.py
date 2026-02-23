@@ -4,8 +4,19 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from .autonomous_agent import run_autonomous_weather_agent
-from .config import FRONTEND_PATH
-from .memory_store import get_recent_conversation, get_user_profile, normalize_user_id
+from .config import (
+    DEFAULT_INCLUDE_TRACE,
+    DEFAULT_REMEMBER_MEMORY,
+    FRONTEND_PATH,
+    TRACE_UI_ENABLED,
+)
+from .memory_store import (
+    clear_user_memory,
+    get_memory_facts,
+    get_recent_conversation,
+    get_user_profile,
+    normalize_user_id,
+)
 from .personas import list_personas
 from .schemas import ChatRequest, ChatResponse
 from .weather_service import chat_fields_from_tool_payload
@@ -23,9 +34,12 @@ def root() -> dict[str, Any]:
             "chat_get": "/chat?city=Chennai",
             "personas": "/personas",
             "user_profile": "/users/{user_id}/profile",
+            "user_memory_get": "/users/{user_id}/memory",
+            "user_memory_delete": "/users/{user_id}/memory",
             "ui": "/ui",
             "docs": "/docs",
         },
+        "trace_debug_enabled": TRACE_UI_ENABLED,
     }
 
 
@@ -53,6 +67,31 @@ def user_profile(user_id: str) -> dict[str, Any]:
         "profile": get_user_profile(safe_user_id),
         "recent_conversation": get_recent_conversation(safe_user_id, limit=10),
     }
+
+
+@app.get("/users/{user_id}/memory")
+def user_memory(
+    user_id: str,
+    limit: int = Query(default=30, ge=1, le=200),
+    memory_type: str | None = Query(default=None),
+) -> dict[str, Any]:
+    safe_user_id = normalize_user_id(user_id)
+    memory_types = [memory_type] if isinstance(memory_type, str) and memory_type.strip() else None
+    return {
+        "user_id": safe_user_id,
+        "facts": get_memory_facts(safe_user_id, memory_types=memory_types, limit=limit),
+        "recent_conversation": get_recent_conversation(safe_user_id, limit=min(limit, 20)),
+    }
+
+
+@app.delete("/users/{user_id}/memory")
+def delete_user_memory(
+    user_id: str,
+    clear_profile: bool = Query(default=False),
+) -> dict[str, Any]:
+    safe_user_id = normalize_user_id(user_id)
+    result = clear_user_memory(safe_user_id, clear_profile=bool(clear_profile))
+    return {"user_id": safe_user_id, "result": result}
 
 
 def _build_chat_response(
@@ -124,13 +163,25 @@ def chat(payload: ChatRequest) -> ChatResponse:
     if city:
         preference_updates["city"] = city
 
+    remember_memory = (
+        bool(payload.remember_memory)
+        if payload.remember_memory is not None
+        else bool(DEFAULT_REMEMBER_MEMORY)
+    )
+    requested_trace = (
+        bool(payload.include_trace)
+        if payload.include_trace is not None
+        else bool(DEFAULT_INCLUDE_TRACE)
+    )
+    include_trace = bool(TRACE_UI_ENABLED and requested_trace)
+
     result = run_autonomous_weather_agent(
         user_input=user_input,
         city_hint=city or None,
         user_id=safe_user_id,
         persona_id=payload.persona_id,
         preference_updates=preference_updates,
-        remember_memory=bool(payload.remember_memory),
+        remember_memory=remember_memory,
     )
     return _build_chat_response(
         response_text=str(result.get("response_text") or ""),
@@ -140,7 +191,7 @@ def chat(payload: ChatRequest) -> ChatResponse:
         persona_id=str(result.get("persona_id") or payload.persona_id or "professional"),
         units=str(result.get("units") or "metric"),
         memory_profile=result.get("profile") if isinstance(result.get("profile"), dict) else None,
-        include_trace=bool(payload.include_trace),
+        include_trace=include_trace,
         trace=result.get("trace") if isinstance(result.get("trace"), list) else [],
     )
 

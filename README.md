@@ -12,7 +12,7 @@
 |   |-- autonomous_agent.py   # Plan -> tool -> observe -> reflect loop
 |   |-- agent_service.py      # LLM agent setup
 |   |-- config.py             # Environment and app constants
-|   |-- memory_store.py       # SQLite long-term memory (profiles + history)
+|   |-- memory_store.py       # SQLite memory (profiles + facts + history retrieval)
 |   |-- personas.py           # Persona catalog and style adaptation
 |   |-- prompts.py            # Agent persona/system prompt
 |   |-- schemas.py            # Request/response models
@@ -42,7 +42,9 @@ Open:
   - Falls back to direct deterministic tool execution if LLM call/tool parsing fails
 - Main UI uses persona-first flow with 5 personas:
   - `professional`, `friendly`, `analyst`, `teacher`, `safety`
-- Long-term memory and trace features remain available via API, but are disabled by default in chat requests.
+- Long-term memory uses structured memory facts (`memory_type`, `value`, `importance`, `last_used_at`) with relevance retrieval.
+- Memory write policy stores durable signals (city preferences, activity interests, schedule patterns, weather preferences).
+- Memory and trace are disabled by default and controlled by env flags.
 
 ### Example `POST /chat`
 
@@ -50,6 +52,8 @@ Open:
 {
   "message": "What is the future weather in Chennai?",
   "persona_id": "teacher",
+  "remember_memory": true,
+  "include_trace": true,
   "preferences": {
     "units": "metric"
   }
@@ -60,12 +64,17 @@ Open:
 
 - `GET /personas`
 - `GET /users/{user_id}/profile`
+- `GET /users/{user_id}/memory`
+- `DELETE /users/{user_id}/memory?clear_profile=false`
 
 ## Environment Variables
 
 - `OPENWEATHER_API_KEY`
 - `HUGGINGFACEHUB_API_TOKEN` or `HUGGINGFACE_API_KEY` (optional for LLM mode)
 - `AGENT_MEMORY_DB_PATH` (optional; default `agent_memory.db` in project root)
+- `DEFAULT_REMEMBER_MEMORY` (default `false`)
+- `DEFAULT_INCLUDE_TRACE` (default `false`)
+- `TRACE_UI_ENABLED` (default `false`; trace responses blocked unless enabled)
 
 ## Deploy on Render
 

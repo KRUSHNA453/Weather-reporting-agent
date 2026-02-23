@@ -11,6 +11,9 @@ services:
       - "8000:8000"
     environment:
       AGENT_MEMORY_DB_PATH: /app/data/agent_memory.db
+      DEFAULT_REMEMBER_MEMORY: "false"
+      DEFAULT_INCLUDE_TRACE: "false"
+      TRACE_UI_ENABLED: "false"
     env_file:
       - .env
     volumes:

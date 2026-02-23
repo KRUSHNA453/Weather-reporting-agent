@@ -1,6 +1,7 @@
 from typing import Any
 
 from .config import HUGGINGFACE_REPO_ID, HUGGINGFACE_TOKEN
+from .personas import persona_instruction_block
 from .prompts import WEATHER_BOT_PERSONA
 from .weather_service import decode_weather_tool_payload, get_weather_forecast
 
@@ -61,26 +62,35 @@ def _compose_input_for_llm(
     persona: dict[str, Any] | None,
     response_style: str,
     memory_city: str | None,
+    profile_summary: dict[str, Any] | None = None,
+    memory_snippets: list[str] | None = None,
 ) -> str:
     persona_payload = persona or {}
-    identity = str(persona_payload.get("identity") or "Professional weather assistant")
-    tone = str(persona_payload.get("tone") or "concise and factual")
-    style_rules = persona_payload.get("style_rules") if isinstance(persona_payload.get("style_rules"), list) else []
-    style_text = "; ".join(str(item) for item in style_rules if str(item).strip())
-    memory_hint = f"User preferred city from memory: {memory_city}." if isinstance(memory_city, str) and memory_city.strip() else ""
+    instruction_lines = [persona_instruction_block(persona_payload, response_style=response_style)]
+    if isinstance(memory_city, str) and memory_city.strip():
+        instruction_lines.append(f"Memory hint: preferred_city={memory_city.strip()}")
 
-    instruction_lines = [
-        "Persona adaptation instructions:",
-        f"- Identity: {identity}",
-        f"- Tone: {tone}",
-        f"- Response style: {response_style}",
-    ]
-    if style_text:
-        instruction_lines.append(f"- Style rules: {style_text}")
-    if memory_hint:
-        instruction_lines.append(f"- Memory context: {memory_hint}")
+    if isinstance(profile_summary, dict):
+        persona_id = profile_summary.get("persona_id")
+        units = profile_summary.get("units")
+        response_mode = profile_summary.get("response_style")
+        profile_items = []
+        if isinstance(persona_id, str) and persona_id.strip():
+            profile_items.append(f"persona={persona_id.strip()}")
+        if isinstance(units, str) and units.strip():
+            profile_items.append(f"units={units.strip()}")
+        if isinstance(response_mode, str) and response_mode.strip():
+            profile_items.append(f"response_style={response_mode.strip()}")
+        if profile_items:
+            instruction_lines.append("Profile context: " + ", ".join(profile_items))
 
-    instruction_lines.append(f"User request: {user_input}")
+    snippets = memory_snippets if isinstance(memory_snippets, list) else []
+    cleaned_snippets = [str(item).strip() for item in snippets if isinstance(item, str) and str(item).strip()]
+    if cleaned_snippets:
+        joined = " | ".join(cleaned_snippets[:6])
+        instruction_lines.append(f"Relevant long-term memories: {joined}")
+
+    instruction_lines.append(f"User request: {user_input.strip()}")
     return "\n".join(instruction_lines)
 
 
@@ -120,6 +130,8 @@ def invoke_llm_weather_agent(
     persona: dict[str, Any] | None,
     response_style: str,
     memory_city: str | None = None,
+    profile_summary: dict[str, Any] | None = None,
+    memory_snippets: list[str] | None = None,
 ) -> dict[str, Any] | None:
     if agent_executor is None:
         return None
@@ -130,6 +142,8 @@ def invoke_llm_weather_agent(
             persona=persona,
             response_style=response_style,
             memory_city=memory_city,
+            profile_summary=profile_summary,
+            memory_snippets=memory_snippets,
         )
         result = agent_executor.invoke({"input": llm_input})
     except Exception as exc:

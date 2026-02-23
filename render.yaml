@@ -18,5 +18,11 @@ services:
         sync: false
       - key: HUGGINGFACEHUB_API_TOKEN
         sync: false
+      - key: DEFAULT_REMEMBER_MEMORY
+        value: "false"
+      - key: DEFAULT_INCLUDE_TRACE
+        value: "false"
+      - key: TRACE_UI_ENABLED
+        value: "false"
       - key: INSTALL_LLM
         value: "true"
