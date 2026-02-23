@@ -36,6 +36,10 @@ Open:
 
 - The chat endpoint now runs a multi-step autonomous loop:
   - `plan -> tool-call -> observe -> reflect -> final-answer`
+- `/chat` is now **LLM-first** when HuggingFace access is available:
+  - Executes LLM agent + tool orchestration via `agent_service`
+  - Extracts tool observations from intermediate steps
+  - Falls back to direct deterministic tool execution if LLM call/tool parsing fails
 - Main UI uses persona-first flow with 5 personas:
   - `professional`, `friendly`, `analyst`, `teacher`, `safety`
 - Long-term memory and trace features remain available via API, but are disabled by default in chat requests.
