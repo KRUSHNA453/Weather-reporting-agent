@@ -9,6 +9,13 @@ services:
     container_name: weather-agent
     ports:
       - "8000:8000"
+    environment:
+      AGENT_MEMORY_DB_PATH: /app/data/agent_memory.db
     env_file:
       - .env
+    volumes:
+      - weather-agent-data:/app/data
     restart: unless-stopped
+
+volumes:
+  weather-agent-data:

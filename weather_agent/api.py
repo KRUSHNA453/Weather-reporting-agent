@@ -147,4 +147,4 @@ def chat(payload: ChatRequest) -> ChatResponse:
 
 @app.get("/chat", response_model=ChatResponse)
 def chat_legacy(city: str = Query(min_length=1, max_length=100)) -> ChatResponse:
-    return chat(ChatRequest(city=city, message=f"What is the weather in {city}?"))
+    return chat(ChatRequest(city=city))

@@ -66,6 +66,7 @@ Open:
 
 - `OPENWEATHER_API_KEY`
 - `HUGGINGFACEHUB_API_TOKEN` or `HUGGINGFACE_API_KEY` (optional for LLM mode)
+- `AGENT_MEMORY_DB_PATH` (optional; default `agent_memory.db` in project root)
 
 ## Deploy on Render
 
@@ -90,3 +91,8 @@ After deploy:
 ```bash
 docker build --build-arg INSTALL_LLM=true -t weather-agent:latest .
 ```
+
+## Docker Memory Persistence
+
+- `docker-compose.yml` mounts `weather-agent-data` volume to `/app/data`.
+- The app uses `AGENT_MEMORY_DB_PATH=/app/data/agent_memory.db`, so long-term memory persists across container restarts.

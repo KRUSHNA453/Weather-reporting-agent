@@ -1,10 +1,14 @@
 import sqlite3
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
-from .config import BASE_DIR
+from .config import AGENT_MEMORY_DB_PATH, BASE_DIR
 
-DB_PATH = BASE_DIR / "agent_memory.db"
+if isinstance(AGENT_MEMORY_DB_PATH, str) and AGENT_MEMORY_DB_PATH.strip():
+    DB_PATH = Path(AGENT_MEMORY_DB_PATH.strip())
+else:
+    DB_PATH = BASE_DIR / "agent_memory.db"
 DEFAULT_USER_ID = "guest"
 
 
@@ -22,6 +26,7 @@ def normalize_user_id(user_id: str | None) -> str:
 
 
 def _connect() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
