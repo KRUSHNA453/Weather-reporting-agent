@@ -306,9 +306,6 @@
     </section>
 
     <section class="composer">
-      <div class="prefs-row">
-        <select id="personaSelect"></select>
-      </div>
       <div class="composer-row">
         <textarea id="messageInput" placeholder="Type your weather question..." maxlength="500"></textarea>
         <button id="sendBtn" type="button">Send</button>
@@ -328,7 +325,6 @@
     const tempValueEl = document.getElementById("tempValue");
     const humidityValueEl = document.getElementById("humidityValue");
     const windValueEl = document.getElementById("windValue");
-    const personaSelect = document.getElementById("personaSelect");
 
     function setStatus(state) {
       statusEl.textContent = state;
@@ -365,37 +361,7 @@
       windValueEl.textContent = wind;
     }
 
-    async function loadPersonas() {
-      const fallback = [
-        { id: "professional", name: "Professional Forecaster" },
-        { id: "friendly", name: "Friendly Guide" },
-        { id: "analyst", name: "Data Analyst" },
-        { id: "teacher", name: "Weather Teacher" },
-        { id: "safety", name: "Safety Advisor" },
-      ];
-
-      let personas = fallback;
-      try {
-        const response = await fetch("/personas");
-        if (response.ok) {
-          const payload = await response.json();
-          if (payload && Array.isArray(payload.personas) && payload.personas.length > 0) {
-            personas = payload.personas;
-          }
-        }
-      } catch (_) {}
-
-      personaSelect.innerHTML = "";
-      personas.forEach((persona) => {
-        const option = document.createElement("option");
-        option.value = persona.id;
-        option.textContent = `Persona: ${persona.name || persona.id}`;
-        if (persona.id === "professional") {
-          option.selected = true;
-        }
-        personaSelect.appendChild(option);
-      });
-    }
+    
 
     async function sendMessage() {
       const message = messageInput.value.trim();
@@ -419,7 +385,6 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             message,
-            persona_id: personaSelect.value || "professional",
             preferences: {},
           }),
         });
@@ -456,7 +421,6 @@
     }
 
     resetWeatherDetails();
-    loadPersonas();
     sendBtn.addEventListener("click", sendMessage);
     messageInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
