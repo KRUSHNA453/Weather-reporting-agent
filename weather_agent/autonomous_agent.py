@@ -80,7 +80,7 @@ WEATHER_PREFERENCE_PATTERNS = (
 def _default_profile(user_id: str) -> dict[str, Any]:
     return {
         "user_id": user_id,
-        "persona_id": "professional",
+        "persona_id": "friendly",
         "preferred_city": None,
         "units": "metric",
         "response_style": "brief",
