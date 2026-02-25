@@ -91,24 +91,14 @@ def apply_persona_style(
     elif style not in {"balanced", "detailed"}:
         payload = _clip_first_sentence(payload)
 
-    persona_id = str(persona.get("id") or DEFAULT_PERSONA_ID)
-    lowered = payload.lower()
-
-    if persona_id == "friendly":
-        if not lowered.startswith("friendly update:"):
-            payload = f"Friendly update: {payload}"
-    elif persona_id == "analyst":
-        if not lowered.startswith("analysis:"):
-            payload = f"Analysis: {payload}"
-    elif persona_id == "teacher":
-        if not lowered.startswith("quick explanation:"):
-            payload = f"Quick explanation: {payload}"
-    elif persona_id == "safety":
-        risk_words = ("storm", "alert", "heavy rain", "rain likely", "heatwave", "strong wind")
-        if any(token in lowered for token in risk_words):
-            payload = f"Safety briefing: {payload} Action: plan shelter, hydration, and backup timing."
-        else:
-            payload = f"Safety briefing: {payload}"
+    
+    if payload.startswith("Current conditions in"):
+        parts = payload.split(":", 1)
+        location_part = parts[0].replace("Current conditions in ", "")
+        description_part = parts[1].strip() if len(parts) > 1 else ""
+        if description_part.endswith('.'):
+            description_part = description_part[:-1]
+        payload = f"It looks like the weather in {location_part} is currently showing {description_part}."
 
     if include_context:
         context_note = str(include_context).strip()
