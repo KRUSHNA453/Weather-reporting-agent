@@ -1002,8 +1002,26 @@ def build_weather_answer_from_tool(user_input: str, tool_payload: dict[str, Any]
             first_answer = f"Forecast data is unavailable for {location}."
         primary_metric = "forecast"
     else:
-        first_answer = f"Current conditions in {location}: {condition_now}."
-        primary_metric = "climate"
+        # Check if future time was requested (tomorrow, next week, etc.)
+        time_type = str(time_reference.get("type") or "today")
+        assumed_today = bool(time_reference.get("assumed_today", True))
+        
+        if not assumed_today and time_type != "today" and daily:
+            # Use daily forecast for future time requests
+            first_item = daily[0] if isinstance(daily[0], dict) else {}
+            first_day_min = _convert_temperature(first_item.get("temp_min_c"), normalized_units)
+            first_day_max = _convert_temperature(first_item.get("temp_max_c"), normalized_units)
+            description = first_item.get("description", "No description")
+            first_answer = (
+                f"Weather forecast for {location} {time_scope}: "
+                f"{first_day_min if first_day_min is not None else 'N/A'}-"
+                f"{first_day_max if first_day_max is not None else 'N/A'} {temp_unit}, "
+                f"{description}."
+            )
+            primary_metric = "forecast"
+        else:
+            first_answer = f"Current conditions in {location}: {condition_now}."
+            primary_metric = "climate"
 
     details: list[str] = []
     if flags["temperature"] and primary_metric != "temperature":
